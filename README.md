@@ -53,3 +53,9 @@ This simulator visualizes:
 ## Browser Compatibility
 
 Works on all modern browsers supporting HTML5 Canvas and ES6 JavaScript.
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+You are free to use, modify, and distribute this project for educational and commercial purposes.
