@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#1a1a2e;color:#eee;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+#topbar{display:flex;align-items:center;gap:6px;padding:8px 12px;background:#16213e;border-bottom:1px solid #0f3460;flex-wrap:wrap}
+#topbar h2{font-size:14px;font-weight:600;color:#e94560;margin-right:4px}
+.btn{padding:5px 12px;border-radius:6px;border:1px solid #0f3460;background:#0f3460;color:#eee;cursor:pointer;font-size:12px;white-space:nowrap}
+.btn.active{background:#e94560;border-color:#e94560}
+.btn.throw-active{background:#f4a261;border-color:#f4a261;color:#1a1a2e}
+#mode-hint{font-size:11px;color:#f4a261;margin-left:4px;font-weight:500}
+#main{display:flex;flex:1;overflow:hidden}
+#canvas-wrap{flex:1;position:relative}
+canvas{display:block;cursor:default}
+#sidebar{width:230px;background:#16213e;border-left:1px solid #0f3460;display:flex;flex-direction:column;overflow-y:auto}
+.panel{padding:12px;border-bottom:1px solid #0f3460}
+.pt{font-size:11px;font-weight:600;color:#e94560;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px}
+.ctrl{margin-bottom:10px}
+.ctrl label{display:flex;justify-content:space-between;font-size:12px;color:#aaa;margin-bottom:4px}
+.ctrl label span{color:#fff;font-weight:600}
+input[type=range]{width:100%;cursor:pointer;accent-color:#e94560}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-size:12px;color:#ccc}
+.tog{width:32px;height:18px;border-radius:9px;background:#333;position:relative;cursor:pointer;flex-shrink:0;transition:background .2s}
+.tog.on{background:#e94560}
+.tog::after{content:'';position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;top:2px;left:2px;transition:left .2s}
+.tog.on::after{left:16px}
+#formula-box{background:#0d1b2a;border-radius:8px;padding:10px;font-size:12px;line-height:1.9;font-family:monospace;color:#7ecfff;white-space:pre-wrap}
+.obj-btn{padding:4px 10px;border-radius:6px;border:1px solid #0f3460;background:#0f3460;color:#eee;cursor:pointer;font-size:12px}
+.obj-btn.active{background:#e94560;border-color:#e94560}
+#obj-row{display:flex;gap:6px;flex-wrap:wrap}
+#status{font-size:11px;color:#aaa;padding:6px 12px;background:#16213e;border-top:1px solid #0f3460;text-align:center}
+.impact-ring{position:absolute;border-radius:50%;pointer-events:none;animation:impactAnim 0.4s ease-out forwards}
+@keyframes impactAnim{from{opacity:1;transform:scale(0.2)}to{opacity:0;transform:scale(1)}}
+</style>
+</head>
+<body>
+<div id="topbar">
+  <h2>FBD Sandbox</h2>
+  <button class="btn active"  id="btn-add">+ Add Object</button>
+  <button class="btn"         id="btn-push">✋ Push Mode</button>
+  <button class="btn"         id="btn-throw">🎯 Throw Mode</button>
+  <button class="btn"         id="btn-freeze">⏸ Freeze</button>
+  <button class="btn"         id="btn-reset">↺ Reset</button>
+  <span id="mode-hint"></span>
+</div>
+<div id="main">
+  <div id="canvas-wrap"><canvas id="c"></canvas></div>
+  <div id="sidebar">
+    <div class="panel">
+      <div class="pt">Object Type</div>
+      <div id="obj-row">
+        <button class="obj-btn active" data-shape="box">Box</button>
+        <button class="obj-btn" data-shape="ball">Ball</button>
+        <button class="obj-btn" data-shape="heavy">Heavy</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="pt">Environment</div>
+      <div class="ctrl">
+        <label>Gravity g <span id="v-g">9.8</span> m/s²</label>
+        <input type="range" id="sl-g" min="0.5" max="25" step="0.1" value="9.8"/>
+      </div>
+      <div class="ctrl">
+        <label>Friction μ <span id="v-mu">0.40</span></label>
+        <input type="range" id="sl-mu" min="0" max="1" step="0.01" value="0.4"/>
+      </div>
+      <div class="ctrl">
+        <label>Bounciness e <span id="v-e">0.50</span></label>
+        <input type="range" id="sl-e" min="0" max="0.95" step="0.01" value="0.5"/>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="pt">Selected Object</div>
+      <div class="ctrl">
+        <label>Mass <span id="v-mass">—</span> kg</label>
+        <input type="range" id="sl-mass" min="1" max="50" step="1" value="5"/>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="pt">Show Forces</div>
+      <div class="toggle-row"><span style="color:#ef233c">Weight Fg</span><div class="tog on" data-f="fg"></div></div>
+      <div class="toggle-row"><span style="color:#4cc9f0">Normal N</span><div class="tog on" data-f="fn"></div></div>
+      <div class="toggle-row"><span style="color:#06d6a0">Applied Fa</span><div class="tog on" data-f="fa"></div></div>
+      <div class="toggle-row"><span style="color:#fb8500">Friction Ff</span><div class="tog on" data-f="ff"></div></div>
+      <div class="toggle-row"><span style="color:#c77dff">Net Force</span><div class="tog on" data-f="fnet"></div></div>
+    </div>
+    <div class="panel">
+      <div class="pt">Live Formulas</div>
+      <div id="formula-box">Select an object</div>
+    </div>
+  </div>
+</div>
+<div id="status">Choose a mode from the top bar, then click an object</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// COORD SYSTEM: py = metres above ground (up = positive)
+// Canvas Y:     canvasY = GROUND_PX - py * PX_PER_M
+// ═══════════════════════════════════════════════════════
+var canvas   = document.getElementById('c');
+var ctx      = canvas.getContext('2d');
+var wrap     = document.getElementById('canvas-wrap');
+var statusEl = document.getElementById('status');
+var modeHint = document.getElementById('mode-hint');
+
+var W = 800, H = 500, GROUND_PX = 420;
+var PX_PER_M = 60;
+var g = 9.8, mu = 0.40, eCOR = 0.50;
+
+var objects = [], selectedId = null, nextId = 0;
+var frozen = false, addMode = false;
+// interaction modes: 'push' | 'throw' | null
+var interactMode = 'push';
+var selectedShape = 'box';
+var forceVis = {fg:true,fn:true,fa:true,ff:true,fnet:true};
+
+// drag
+var dragObj = null;
+var dragAnchorX = 0;          // mouse X when drag started (push mode)
+var prevMX = 0, prevMY = 0;
+var mouseVX = 0, mouseVY = 0; // smoothed mouse velocity px/frame
+
+// impact effects
+var impacts = []; // {cx, cy, r, maxR, alpha, color}
+
+var ACOLS = {fg:'#ef233c',fn:'#4cc9f0',fa:'#06d6a0',ff:'#fb8500',fnet:'#c77dff'};
+
+// ── coord helpers ─────────────────────────────────────
+function toCY(py)  { return GROUND_PX - py * PX_PER_M; }
+function toPY(cy)  { return (GROUND_PX - cy) / PX_PER_M; }
+
+function resize() {
+  W = wrap.clientWidth; H = wrap.clientHeight;
+  canvas.width = W; canvas.height = H;
+  GROUND_PX = H - 70;
+  for (var i = 0; i < objects.length; i++) {
+    if (objects[i].onGround) objects[i].py = 0;
+  }
+}
+
+// ── Object factory ────────────────────────────────────
+function makeObj(cx, shape) {
+  var cfg = {
+    box:   {mass:5,  hw:26,hh:26,color:'#4cc9f0',label:'Box',  round:false},
+    ball:  {mass:3,  hw:22,hh:22,color:'#f72585',label:'Ball', round:true },
+    heavy: {mass:20, hw:36,hh:30,color:'#7209b7',label:'Heavy',round:false}
+  };
+  var c = cfg[shape] || cfg.box;
+  return {
+    id:nextId++, shape:shape,
+    cx:cx, py:0,
+    vx:0, vy:0, angle:0,
+    mass:c.mass, hw:c.hw, hh:c.hh,
+    color:c.color, label:c.label, round:c.round,
+    fa:0, onGround:true, held:false,
+    trail:[],
+    impactVy:0  // last vertical speed at impact (for visual effect)
+  };
+}
+
+// ── Physics ───────────────────────────────────────────
+function stepPhysics(dt) {
+  if (frozen) return;
+  for (var i = 0; i < objects.length; i++) {
+    var o = objects[i];
+    if (o.held) continue;
+
+    var Fg = o.mass * g;
+    var Fn = o.onGround ? Fg : 0;
+    var Ff = 0;
+
+    if (o.onGround) {
+      var Ffmax = mu * Fn;
+      if (Math.abs(o.vx) > 0.01) {
+        Ff = -Math.sign(o.vx) * Ffmax;
+      } else {
+        var needed = -o.fa;
+        Ff = Math.abs(needed) <= Ffmax ? needed : -Math.sign(o.fa) * Ffmax;
+      }
+    }
+
+    var ax = (o.fa + Ff) / o.mass;
+    var ay = o.onGround ? 0 : -g;   // gravity when airborne
+
+    o.vx += ax * dt;
+    o.vy += ay * dt;
+
+    // ground friction deceleration
+    if (o.onGround && Math.abs(o.fa) < 0.5) {
+      var dv = mu * g * dt;
+      if (Math.abs(o.vx) <= dv) o.vx = 0;
+      else o.vx -= Math.sign(o.vx) * dv;
+    }
+
+    // integrate position
+    o.cx += o.vx * dt * PX_PER_M;
+    o.py += o.vy * dt;
+
+    // ball rolling
+    if (o.round && o.onGround) o.angle += (o.vx * dt * PX_PER_M) / o.hw;
+
+    // wall bounds
+    if (o.cx - o.hw < 0)   { o.cx = o.hw;   o.vx =  Math.abs(o.vx) * 0.4; }
+    if (o.cx + o.hw > W)   { o.cx = W-o.hw; o.vx = -Math.abs(o.vx) * 0.4; }
+
+    // ground collision
+    if (o.py <= 0) {
+      o.py = 0;
+      if (o.vy < -0.3) {
+        var impactVy = o.vy;          // capture before bounce
+        o.vy = -o.vy * eCOR;
+        o.vx *= (1 - 0.1*(1-eCOR));
+        // spawn impact effect — size and brightness scale with mass × velocity
+        spawnImpact(o, impactVy);
+        if (Math.abs(o.vy) < 0.5) { o.vy = 0; o.onGround = true; }
+      } else {
+        o.vy = 0; o.onGround = true;
+      }
+    } else {
+      o.onGround = false;
+    }
+
+    // trail when airborne
+    if (!o.onGround) {
+      o.trail.push({x:o.cx, y:toCY(o.py + o.hh/PX_PER_M)});
+      if (o.trail.length > 55) o.trail.shift();
+    } else { o.trail = []; }
+  }
+
+  // age impact effects
+  for (var j = impacts.length-1; j >= 0; j--) {
+    impacts[j].alpha -= 0.04;
+    impacts[j].r += impacts[j].growSpeed;
+    if (impacts[j].alpha <= 0) impacts.splice(j,1);
+  }
+}
+
+// ── Impact visual ─────────────────────────────────────
+function spawnImpact(o, impactVy) {
+  // impactVy is negative (downward), take absolute value
+  var speed  = Math.abs(impactVy);
+  // impact energy = ½mv² — heavier + faster = bigger ring
+  var energy = 0.5 * o.mass * speed * speed;
+  var maxR   = Math.min(20 + energy * 0.08, 120); // cap at 120px
+  var thick  = Math.min(2 + o.mass * 0.15, 8);
+  impacts.push({
+    cx: o.cx,
+    cy: GROUND_PX,
+    r: o.hw * 0.5,
+    maxR: maxR,
+    growSpeed: (maxR - o.hw * 0.5) / 20,
+    alpha: 1.0,
+    thick: thick,
+    color: o.color
+  });
+  // extra dust puffs for heavy objects
+  if (o.mass >= 15) {
+    for (var k = 0; k < 3; k++) {
+      impacts.push({
+        cx: o.cx + (Math.random()-0.5) * o.hw * 2,
+        cy: GROUND_PX,
+        r: 2,
+        maxR: 15 + Math.random() * 25,
+        growSpeed: 1.2 + Math.random(),
+        alpha: 0.6,
+        thick: 1.5,
+        color: '#aaaaaa'
+      });
+    }
+  }
+}
+
+// ── Draw helpers ──────────────────────────────────────
+function drawArrow(x, y, dx, dy, color, label, val) {
+  if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
+  ctx.save();
+  ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+dx,y+dy); ctx.stroke();
+  var ang = Math.atan2(dy,dx), hs = 9;
+  ctx.beginPath();
+  ctx.moveTo(x+dx,y+dy);
+  ctx.lineTo(x+dx-hs*Math.cos(ang-0.4), y+dy-hs*Math.sin(ang-0.4));
+  ctx.lineTo(x+dx-hs*Math.cos(ang+0.4), y+dy-hs*Math.sin(ang+0.4));
+  ctx.closePath(); ctx.fill();
+  ctx.font = 'bold 11px system-ui';
+  ctx.textAlign = dx >= 0 ? 'left' : 'right';
+  ctx.fillText(label+' = '+Math.abs(val).toFixed(1)+'N', x+dx+(dx>=0?8:-8), y+dy+(dy<0?-6:14));
+  ctx.restore();
+}
+
+function getPos(o) {
+  var bot = toCY(o.py);
+  return {cx:o.cx, bot:bot, top:bot - o.hh*2, mid:bot - o.hh};
+}
+
+function drawObject(o) {
+  var p = getPos(o);
+  var sel = (o.id === selectedId);
+  var inAir = !o.onGround && !o.held;
+
+  // trail
+  if (o.trail.length > 1) {
+    ctx.save();
+    for (var t = 1; t < o.trail.length; t++) {
+      var a = t / o.trail.length;
+      ctx.strokeStyle = o.color + Math.floor(a*150).toString(16).padStart(2,'0');
+      ctx.lineWidth = 2.5 * a;
+      ctx.beginPath();
+      ctx.moveTo(o.trail[t-1].x, o.trail[t-1].y);
+      ctx.lineTo(o.trail[t].x,   o.trail[t].y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // throw preview — only in throw mode when held and lifted
+  if (o.held && interactMode === 'throw' && o.py > o.hh/PX_PER_M + 0.05) {
+    ctx.save();
+    ctx.strokeStyle = '#f4a26199'; ctx.fillStyle = '#f4a261bb';
+    ctx.lineWidth = 2; ctx.setLineDash([4,3]);
+    var pvx = mouseVX * 2.5, pvy = -mouseVY * 2.5;
+    var plen = Math.sqrt(pvx*pvx+pvy*pvy) || 1;
+    var pscale = Math.min(plen, 80);
+    ctx.beginPath(); ctx.moveTo(p.cx, p.mid);
+    ctx.lineTo(p.cx + pvx/plen*pscale, p.mid + pvy/plen*pscale);
+    ctx.stroke(); ctx.setLineDash([]);
+    ctx.font = 'bold 10px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText('release to throw', p.cx, p.top - 10);
+    ctx.restore();
+  }
+
+  ctx.save();
+  ctx.fillStyle = o.color + (o.held ? '88' : 'cc');
+  ctx.strokeStyle = sel ? '#fff' : o.color;
+  ctx.lineWidth = sel ? 2.5 : 1.5;
+
+  if (o.round) {
+    ctx.save();
+    ctx.translate(p.cx, p.mid); ctx.rotate(o.angle);
+    ctx.beginPath(); ctx.arc(0,0,o.hw,0,Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = '#ffffff99'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(o.hw-3,0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,-(o.hw-3)); ctx.lineTo(0,o.hw-3); ctx.stroke();
+    ctx.fillStyle='#fff'; ctx.font='bold 11px system-ui'; ctx.textAlign='center';
+    ctx.fillText(o.label,0,4);
+    ctx.restore();
+  } else {
+    ctx.beginPath(); ctx.rect(p.cx-o.hw, p.top, o.hw*2, o.hh*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#fff'; ctx.font='bold 12px system-ui'; ctx.textAlign='center';
+    ctx.fillText(o.label, p.cx, p.mid+4);
+    ctx.font='10px system-ui'; ctx.fillStyle='#ffffffaa';
+    ctx.fillText(o.mass+' kg', p.cx, p.mid+17);
+  }
+  ctx.restore();
+
+  // force arrows
+  var Fg = o.mass * g;
+  var Fn = (o.onGround && !o.held) ? Fg : 0;
+  var Ff = 0;
+  if (o.onGround && !o.held) {
+    var Ffmax = mu * Fn;
+    if (Math.abs(o.vx) > 0.01) Ff = -Math.sign(o.vx)*Ffmax;
+    else { var nd = -o.fa; Ff = Math.abs(nd)<=Ffmax ? nd : -Math.sign(o.fa)*Ffmax; }
+  }
+  var FnetX = o.held ? 0 : o.fa + Ff;
+  var FnetY = inAir ? -Fg : 0;
+  var AS = 3.5;
+
+  if (forceVis.fg) drawArrow(p.cx, p.bot, 0, Fg*AS*0.45, ACOLS.fg, 'Fg', Fg);
+  if (forceVis.fn && Fn>0) drawArrow(p.cx, p.top, 0, -Fn*AS*0.45, ACOLS.fn, 'N', Fn);
+  if (forceVis.fa && Math.abs(o.fa)>0.5 && !inAir) {
+    var sx = o.fa>0 ? p.cx-o.hw-4 : p.cx+o.hw+4;
+    drawArrow(sx, p.mid, o.fa*AS*0.55, 0, ACOLS.fa, 'Fa', o.fa);
+  }
+  if (forceVis.ff && Math.abs(Ff)>0.5) drawArrow(p.cx, p.mid+8, Ff*AS*0.55, 0, ACOLS.ff, 'Ff', Ff);
+  if (forceVis.fnet) {
+    var fm = Math.sqrt(FnetX*FnetX+FnetY*FnetY);
+    if (fm>0.3) drawArrow(p.cx, p.top-14, FnetX*AS*0.55, -FnetY*AS*0.3, ACOLS.fnet, 'Fnet', fm);
+  }
+}
+
+function drawImpacts() {
+  for (var i = 0; i < impacts.length; i++) {
+    var im = impacts[i];
+    ctx.save();
+    ctx.strokeStyle = im.color;
+    ctx.globalAlpha = im.alpha;
+    ctx.lineWidth = im.thick;
+    ctx.beginPath();
+    ctx.ellipse(im.cx, im.cy, im.r, im.r * 0.3, 0, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawScene() {
+  ctx.clearRect(0,0,W,H);
+
+  // grid
+  ctx.strokeStyle='#ffffff07'; ctx.lineWidth=1;
+  for (var x=0;x<W;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for (var y=0;y<H;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+
+  // ground
+  ctx.fillStyle='#0f3460'; ctx.fillRect(0,GROUND_PX,W,H-GROUND_PX);
+  ctx.strokeStyle='#4cc9f0'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(0,GROUND_PX); ctx.lineTo(W,GROUND_PX); ctx.stroke();
+  ctx.strokeStyle='#4cc9f033'; ctx.lineWidth=1;
+  for (var xi=0;xi<W;xi+=20){ctx.beginPath();ctx.moveTo(xi,GROUND_PX);ctx.lineTo(xi-15,GROUND_PX+15);ctx.stroke();}
+
+  ctx.fillStyle='#4cc9f099'; ctx.font='11px system-ui'; ctx.textAlign='left';
+  ctx.fillText('g='+g.toFixed(1)+' m/s²  μ='+mu.toFixed(2)+'  e='+eCOR.toFixed(2), 10, GROUND_PX+18);
+
+  drawImpacts();
+  for (var i=0;i<objects.length;i++) drawObject(objects[i]);
+
+  if (frozen) {
+    ctx.fillStyle='#ffffff10'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#ffd166'; ctx.font='bold 13px system-ui'; ctx.textAlign='center';
+    ctx.fillText('FROZEN — inspect forces freely',W/2,24);
+  }
+}
+
+// ── Formulas ──────────────────────────────────────────
+function updateFormulas() {
+  var box = document.getElementById('formula-box');
+  var o = null;
+  for (var i=0;i<objects.length;i++){if(objects[i].id===selectedId){o=objects[i];break;}}
+  if (!o){box.textContent='Select an object';return;}
+  var Fg=(o.mass*g).toFixed(1);
+  if (!o.onGround && !o.held) {
+    box.textContent=
+      '— Projectile (airborne) —\n'+
+      'Fg = m×g = '+o.mass+'×'+g.toFixed(1)+' = '+Fg+' N\n'+
+      'N  = 0   (no surface)\n'+
+      'Ff = 0   (no surface)\n'+
+      'ax = 0\n'+
+      'ay = −g = −'+g.toFixed(1)+' m/s²\n'+
+      'vx = '+o.vx.toFixed(2)+' m/s\n'+
+      'vy = '+o.vy.toFixed(2)+' m/s';
+  } else if (o.held) {
+    box.textContent='Holding...\nRelease to throw!';
+  } else {
+    var Fn=(o.mass*g).toFixed(1);
+    var Ffmax=mu*o.mass*g;
+    var Ff=0;
+    if(Math.abs(o.vx)>0.01) Ff=-Math.sign(o.vx)*Ffmax;
+    else {var nd=-o.fa;Ff=Math.abs(nd)<=Ffmax?nd:-Math.sign(o.fa)*Ffmax;}
+    var Fnet=o.fa+Ff;
+    var a=(Fnet/o.mass).toFixed(2);
+    var mode=Math.abs(o.vx)>0.05?'kinetic':'static';
+    box.textContent=
+      'Fg = m×g = '+o.mass+'×'+g.toFixed(1)+' = '+Fg+' N ↓\n'+
+      'N  = '+Fn+' N ↑\n'+
+      'Ff_max = μN = '+Ffmax.toFixed(1)+' N\n'+
+      'Ff = '+Math.abs(Ff).toFixed(1)+' N ('+mode+')\n'+
+      'Fnet = '+Fnet.toFixed(1)+' N\n'+
+      'a = Fnet/m = '+a+' m/s²\n'+
+      'vx = '+o.vx.toFixed(2)+' m/s';
+  }
+}
+
+function syncSliders() {
+  var o=null;
+  for(var i=0;i<objects.length;i++){if(objects[i].id===selectedId){o=objects[i];break;}}
+  if(!o)return;
+  document.getElementById('sl-mass').value=o.mass;
+  document.getElementById('v-mass').textContent=o.mass;
+}
+
+// ── Hit detection ─────────────────────────────────────
+function getObjAt(px, py) {
+  for (var i=objects.length-1;i>=0;i--) {
+    var o=objects[i], p=getPos(o);
+    if (o.round) {
+      var dx=px-p.cx, dy=py-p.mid;
+      if (dx*dx+dy*dy<=(o.hw+8)*(o.hw+8)) return o;
+    } else {
+      if (px>=p.cx-o.hw-5&&px<=p.cx+o.hw+5&&py>=p.top-5&&py<=p.bot+5) return o;
+    }
+  }
+  return null;
+}
+
+function canvasXY(e) {
+  var r=canvas.getBoundingClientRect();
+  return {x:(e.clientX-r.left)*(W/r.width), y:(e.clientY-r.top)*(H/r.height)};
+}
+
+// ── Mode management ───────────────────────────────────
+function setMode(mode) {
+  interactMode = mode;
+  addMode = (mode === 'add');
+  document.getElementById('btn-add').classList.toggle('active',   mode==='add');
+  document.getElementById('btn-push').classList.toggle('active',  mode==='push');
+  document.getElementById('btn-throw').classList.toggle('throw-active', mode==='throw');
+  document.getElementById('btn-throw').classList.toggle('active', false);
+  var hints = {
+    add:   'Click canvas to place object',
+    push:  'Drag object LEFT / RIGHT to push',
+    throw: 'Drag object ANYWHERE — release to throw!'
+  };
+  modeHint.textContent = hints[mode] || '';
+  statusEl.textContent = hints[mode] || '';
+}
+
+// ── Mouse events ──────────────────────────────────────
+canvas.addEventListener('mousedown', function(e) {
+  var p = canvasXY(e);
+
+  if (interactMode === 'add') {
+    if (p.y < GROUND_PX) {
+      var o = makeObj(p.x, selectedShape);
+      objects.push(o); selectedId = o.id;
+      syncSliders();
+      setMode('push');
+      statusEl.textContent = o.label+' placed! Now in Push mode — drag it sideways.';
+    }
+    return;
+  }
+
+  var hit = getObjAt(p.x, p.y);
+  if (!hit) return;
+  selectedId  = hit.id;
+  dragObj     = hit;
+  hit.held    = true;
+  hit.vx = 0; hit.vy = 0;
+  prevMX = p.x; prevMY = p.y;
+  mouseVX = 0; mouseVY = 0;
+  dragAnchorX = p.x;
+  syncSliders();
+
+  if (interactMode === 'push') {
+    hit.onGround = true; hit.py = 0;
+    statusEl.textContent = 'Dragging '+hit.label+' — push left or right';
+  } else if (interactMode === 'throw') {
+    hit.onGround = false;
+    statusEl.textContent = 'Drag anywhere, then release to throw '+hit.label+'!';
+  }
+});
+
+canvas.addEventListener('mousemove', function(e) {
+  if (!dragObj) return;
+  var p = canvasXY(e);
+
+  mouseVX = mouseVX*0.4 + (p.x-prevMX)*0.6;
+  mouseVY = mouseVY*0.4 + (p.y-prevMY)*0.6;
+  prevMX = p.x; prevMY = p.y;
+
+  if (interactMode === 'push') {
+    // PUSH MODE: object stays on ground, only horizontal movement
+    dragObj.cx = p.x;
+    dragObj.py = 0;
+    dragObj.onGround = true;
+    // velocity = how fast mouse is moving (converted to m/s)
+    dragObj.vx = mouseVX * (g / PX_PER_M) * 3.5;
+    var dx = p.x - dragAnchorX;
+    dragObj.fa = dx * 0.9;
+    canvas.style.cursor = 'ew-resize';
+  } else if (interactMode === 'throw') {
+    // THROW MODE: object follows mouse freely in 2D
+    dragObj.cx = Math.max(dragObj.hw, Math.min(W-dragObj.hw, p.x));
+    var py = toPY(p.y);
+    dragObj.py = Math.max(0, py);
+    canvas.style.cursor = 'grabbing';
+  }
+});
+
+canvas.addEventListener('mouseup', function() {
+  if (!dragObj) return;
+  dragObj.held = false;
+
+  if (interactMode === 'push') {
+    // keep vx alive — friction in stepPhysics will naturally decelerate it
+    dragObj.fa = 0;
+    dragObj.onGround = true;
+    dragObj.py = 0;
+    statusEl.textContent = 'Released! Friction (μ='+mu.toFixed(2)+') is slowing it down...';
+  } else if (interactMode === 'throw') {
+    var isLifted = dragObj.py > dragObj.hh/PX_PER_M + 0.05;
+    if (isLifted) {
+      // convert px/frame → m/s
+      var scale = g / PX_PER_M * 5.5;
+      dragObj.vx =  mouseVX * scale;
+      dragObj.vy = -mouseVY * scale;
+      dragObj.onGround = false;
+      statusEl.textContent = 'Thrown! vx='+dragObj.vx.toFixed(1)+' vy='+dragObj.vy.toFixed(1)+' m/s';
+    } else {
+      dragObj.py = 0; dragObj.vy = 0; dragObj.vx = 0;
+      dragObj.onGround = true;
+      statusEl.textContent = 'Dropped on ground.';
+    }
+  }
+
+  canvas.style.cursor = 'default';
+  dragObj = null;
+});
+
+// touch
+canvas.addEventListener('touchstart',function(e){e.preventDefault();var t=e.touches[0];canvas.dispatchEvent(new MouseEvent('mousedown',{clientX:t.clientX,clientY:t.clientY}));},{passive:false});
+canvas.addEventListener('touchmove', function(e){e.preventDefault();var t=e.touches[0];canvas.dispatchEvent(new MouseEvent('mousemove',{clientX:t.clientX,clientY:t.clientY}));},{passive:false});
+canvas.addEventListener('touchend',  function(){canvas.dispatchEvent(new MouseEvent('mouseup',{}));});
+
+// sliders
+document.getElementById('sl-g').addEventListener('input',function(){g=parseFloat(this.value);document.getElementById('v-g').textContent=g.toFixed(1);});
+document.getElementById('sl-mu').addEventListener('input',function(){mu=parseFloat(this.value);document.getElementById('v-mu').textContent=mu.toFixed(2);});
+document.getElementById('sl-e').addEventListener('input',function(){eCOR=parseFloat(this.value);document.getElementById('v-e').textContent=eCOR.toFixed(2);});
+document.getElementById('sl-mass').addEventListener('input',function(){
+  var o=null;for(var i=0;i<objects.length;i++){if(objects[i].id===selectedId){o=objects[i];break;}}
+  if(o)o.mass=parseInt(this.value);
+  document.getElementById('v-mass').textContent=this.value;
+});
+
+// mode buttons
+document.getElementById('btn-add').addEventListener('click',   function(){ setMode('add');   });
+document.getElementById('btn-push').addEventListener('click',  function(){ setMode('push');  });
+document.getElementById('btn-throw').addEventListener('click', function(){ setMode('throw'); });
+
+document.getElementById('btn-freeze').addEventListener('click',function(){
+  frozen=!frozen;
+  this.textContent=frozen?'▶ Resume':'⏸ Freeze';
+  this.classList.toggle('active',frozen);
+});
+document.getElementById('btn-reset').addEventListener('click',function(){
+  objects=[];selectedId=null;dragObj=null;impacts=[];
+  document.getElementById('v-mass').textContent='—';
+  document.getElementById('formula-box').textContent='Select an object';
+  setMode('push');
+  statusEl.textContent='Reset — click "+ Add Object" to start';
+});
+document.querySelectorAll('.obj-btn').forEach(function(b){
+  b.addEventListener('click',function(){
+    document.querySelectorAll('.obj-btn').forEach(function(x){x.classList.remove('active');});
+    b.classList.add('active'); selectedShape=b.dataset.shape;
+  });
+});
+document.querySelectorAll('.tog').forEach(function(t){
+  t.addEventListener('click',function(){
+    forceVis[t.dataset.f]=!forceVis[t.dataset.f];
+    t.classList.toggle('on',forceVis[t.dataset.f]);
+  });
+});
+
+// ── Loop ──────────────────────────────────────────────
+var lastTs = null;
+function loop(ts) {
+  if (!lastTs) lastTs = ts;
+  var dt = Math.min((ts-lastTs)/1000, 0.033);
+  lastTs = ts;
+  stepPhysics(dt);
+  drawScene();
+  updateFormulas();
+  requestAnimationFrame(loop);
+}
+
+window.addEventListener('resize', resize);
+resize();
+setMode('push');
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
